@@ -28,12 +28,25 @@
         background-color: #e0e0e0;
       }
 
-      #statusMain {
-        font-size: 5rem;
+      #accessButton {
+        appearance: none;
+        border: none;
+        border-radius: 16px;
+        width: 54vw;
+        height: 24vh;
+        font-family: Arial, sans-serif;
+        font-size: 3.2vw;
         font-weight: bold;
-        color: #424242;
+        line-height: 1.25;
         text-align: center;
-        line-height: 1.15;
+        cursor: pointer;
+        box-sizing: border-box;
+        padding: 2vh 3vw;
+        transition: background-color 0.25s ease, color 0.25s ease;
+      }
+
+      #accessButton:disabled {
+        cursor: default;
       }
     </style>
   </head>
@@ -44,7 +57,7 @@
         style="height: 15vh"
         id="topPanel"
       >
-        <p class="title mb-0 has-text-white" id="workspaceName" style="font-size: 3rem">
+        <p class="title mb-0 has-text-white" style="font-size: 3rem">
           Ufficio Direttore
         </p>
       </div>
@@ -53,7 +66,7 @@
         style="height: 70vh"
         id="main"
       >
-        <p id="statusMain">Direttore Assente</p>
+        <button type="button" id="accessButton">Divieto di Accesso</button>
       </div>
       <div
         class="status-bar column is-12 is-flex is-align-items-center is-justify-content-center"
