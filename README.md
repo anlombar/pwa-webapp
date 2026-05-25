@@ -40,9 +40,9 @@ This Web App also works for rooms
     xConfiguration WebEngine Features Peripherals AudioOutput: On
     ```
 
-3. Lastly set the Persistent Web App URL to the PWA Web App: ``https://wxsd-sales.github.io/pwa-webapp``
+3. Lastly set the Persistent Web App URL to the PWA Web App: ``https://anlombar.github.io/pwa-webapp/ ``
     ```
-    xConfiguration UserInterface HomeScreen Peripherals WebApp URL: https://wxsd-sales.github.io/pwa-webapp/
+    xConfiguration UserInterface HomeScreen Peripherals WebApp URL: https://anlombar.github.io/pwa-webapp/ 
     ```
     
 ## Demo
