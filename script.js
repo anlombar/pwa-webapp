@@ -1,115 +1,125 @@
-const topPanel = document.getElementById("topPanel");
-const bottomPanel = document.getElementById("bottomPanel");
-const roomStatus = document.getElementById("roomStatus");
-const accessButton = document.getElementById("accessButton");
-
 const PRESENT_COLOR = "#43a047";
 const ABSENT_COLOR = "#ff9800";
+const BTN_GRAY = "#9e9e9e";
+const BTN_RED = "#e53935";
+const TEXT_WHITE = "#ffffff";
+const TEXT_RED = "#e53935";
 const TEXT_PRESENT = "Direttore Presente";
 const TEXT_ABSENT = "Direttore Assente";
 
-const BTN_GRAY = "#9e9e9e";
-const BTN_RED = "#e53935";
-const COLOR_WHITE = "#ffffff";
-const COLOR_RED_TEXT = "#e53935";
+const BUTTON = {
+  present: { label: "Richiedi accesso", bg: BTN_GRAY, fg: TEXT_WHITE, clickable: true },
+  pending: { label: "Attendere Autorizzazione", bg: BTN_RED, fg: TEXT_WHITE, clickable: false },
+  absent: { label: "Divieto di Accesso", bg: BTN_GRAY, fg: TEXT_RED, clickable: false },
+};
+
+let topPanel;
+let bottomPanel;
+let roomStatus;
+let accessButton;
+let accessButtonLabel;
 
 let xapi;
 let peopleCountCurrent = 0;
 let accessRequestPending = false;
+let directorPresent = false;
 
-window.onload = async function () {
+function boot() {
+  topPanel = document.getElementById("topPanel");
+  bottomPanel = document.getElementById("bottomPanel");
+  roomStatus = document.getElementById("roomStatus");
+  accessButton = document.getElementById("accessButton");
+  accessButtonLabel = document.getElementById("accessButtonLabel");
+
+  if (!accessButton || !accessButtonLabel) {
+    console.log("Elementi pulsante non trovati");
+    return;
+  }
+
   accessButton.addEventListener("click", handleAccessButtonClick);
+  accessButton.addEventListener("touchend", handleAccessButtonTouch);
+
+  applyUiState(false, false);
   init();
-};
+}
+
+document.addEventListener("DOMContentLoaded", boot);
 
 async function init() {
   try {
     xapi = await window.getXAPI();
-    xapi.Config.UserInterface.LedControl.Mode.set("Manual").catch(() => {});
-    getInitial();
-    subscribe();
+    await xapi.Config.UserInterface.LedControl.Mode.set("Manual");
+    await readPeopleCount();
+    subscribePeopleCount();
   } catch (e) {
     console.log("Impossibile connettersi al device:", e);
-    displayAbsent();
+    applyUiState(false, false);
   }
 }
 
-async function getInitial() {
-  xapi.Status.RoomAnalytics.PeopleCount.Current.get().then((currentCount) => {
+async function readPeopleCount() {
+  try {
+    let currentCount = await xapi.Status.RoomAnalytics.PeopleCount.Current.get();
     if (currentCount == "-1") currentCount = 0;
     peopleCountCurrent = parseInt(currentCount, 10) || 0;
-    updatePresence();
-  });
+    applyUiState(peopleCountCurrent >= 1, accessRequestPending);
+  } catch (e) {
+    console.log("PeopleCount non disponibile:", e);
+    applyUiState(false, false);
+  }
 }
 
-function subscribe() {
+function subscribePeopleCount() {
   xapi.Status.RoomAnalytics.PeopleCount.Current.on((currentCount) => {
     if (currentCount == "-1") currentCount = 0;
     peopleCountCurrent = parseInt(currentCount, 10) || 0;
-    updatePresence();
+    if (peopleCountCurrent < 1) {
+      accessRequestPending = false;
+    }
+    applyUiState(peopleCountCurrent >= 1, accessRequestPending);
   });
 }
 
+function handleAccessButtonTouch(event) {
+  event.preventDefault();
+  handleAccessButtonClick();
+}
+
 function handleAccessButtonClick() {
-  if (peopleCountCurrent < 1 || accessRequestPending) return;
+  if (!directorPresent || accessRequestPending) return;
   accessRequestPending = true;
-  updateAccessButton();
+  applyUiState(true, true);
 }
 
-function updatePresence() {
-  if (peopleCountCurrent >= 1) {
-    displayPresent();
-  } else {
-    displayAbsent();
-  }
-}
+function applyUiState(isPresent, isPending) {
+  directorPresent = isPresent;
+  accessRequestPending = isPending && isPresent;
 
-function setStatusBarColor(color) {
-  topPanel.style.backgroundColor = color;
-  bottomPanel.style.backgroundColor = color;
-}
-
-function setStatusText(text) {
-  roomStatus.innerHTML = text;
-}
-
-function updateAccessButton() {
-  if (peopleCountCurrent >= 1) {
-    if (accessRequestPending) {
-      accessButton.disabled = true;
-      accessButton.style.backgroundColor = BTN_RED;
-      accessButton.style.color = COLOR_WHITE;
-      accessButton.textContent = "Attendere Autorizzazione";
-      return;
-    }
-    accessButton.disabled = false;
-    accessButton.style.backgroundColor = BTN_GRAY;
-    accessButton.style.color = COLOR_WHITE;
-    accessButton.textContent = "Richiedi accesso";
+  if (isPresent) {
+    topPanel.style.backgroundColor = PRESENT_COLOR;
+    bottomPanel.style.backgroundColor = PRESENT_COLOR;
+    roomStatus.textContent = TEXT_PRESENT;
+    setAccessButton(isPending ? "pending" : "present");
+    xapi?.Command?.UserInterface?.LedControl?.Color?.Set({ Color: "Green" }).catch(
+      () => {}
+    );
     return;
   }
 
-  accessButton.disabled = true;
-  accessButton.style.backgroundColor = BTN_GRAY;
-  accessButton.style.color = COLOR_RED_TEXT;
-  accessButton.textContent = "Divieto di Accesso";
-}
-
-function displayPresent() {
-  setStatusBarColor(PRESENT_COLOR);
-  setStatusText(TEXT_PRESENT);
-  updateAccessButton();
-  xapi?.Command?.UserInterface?.LedControl?.Color?.Set({ Color: "Green" }).catch(
-    () => {}
-  );
-}
-
-function displayAbsent() {
-  accessRequestPending = false;
-  setStatusBarColor(ABSENT_COLOR);
-  setStatusText(TEXT_ABSENT);
-  updateAccessButton();
+  topPanel.style.backgroundColor = ABSENT_COLOR;
+  bottomPanel.style.backgroundColor = ABSENT_COLOR;
+  roomStatus.textContent = TEXT_ABSENT;
+  setAccessButton("absent");
   xapi?.Command?.UserInterface?.LedControl?.Color?.Set({ Color: "Yellow" }).catch(
     () => {}
   );
+}
+
+function setAccessButton(mode) {
+  const cfg = BUTTON[mode];
+  accessButtonLabel.textContent = cfg.label;
+  accessButton.style.backgroundColor = cfg.bg;
+  accessButtonLabel.style.color = cfg.fg;
+  accessButton.style.pointerEvents = cfg.clickable ? "auto" : "none";
+  accessButton.style.opacity = cfg.clickable ? "1" : "1";
 }
