@@ -11,7 +11,7 @@ const OSD_TARGET = "OSD";
 /** Desk Pro — oppure ?desk=https://192.168.x.x nell'URL PWA */
 const DESK_HOST = "CHANGE_ME";
 const DESK_API_USER = "admin";
-const DESK_API_PASS = "Cisco2026!";
+const DESK_API_PASS = "CHANGE_ME";
 
 const BUTTON = {
   present: { label: "Richiedi Accesso", bg: BTN_GRAY, fg: TEXT_WHITE, clickable: true },
@@ -189,41 +189,45 @@ async function initDeskHttpClient() {
     return;
   }
 
-  await xapi.Config.HttpClient.Mode.set("On").catch(() => {});
-  await xapi.Config.HttpClient.AllowHTTP.set("On").catch(() => {});
-
-  let insecure = "Off";
-  try {
-    insecure = await xapi.Config.HttpClient.AllowInsecureHTTPS.get();
-  } catch (e) {
-    console.log("AllowInsecureHTTPS.get:", e);
-  }
-  deskHttpReady = String(insecure).toLowerCase() === "on" || insecure === true;
-  if (!deskHttpReady) {
-    console.log(
-      "OSD Desk: abilitare sul Navigator xConfiguration HttpClient AllowInsecureHTTPS On"
-    );
-    return;
-  }
-
   const host = peerHostName();
   if (host) {
-    await xapi.Command.HttpClient.Allow.Hostname.Add({ Hostname: host }).catch(() => {});
+    await xapi.Command.HttpClient.Allow.Hostname.Add({ Hostname: host }).catch((e) => {
+      console.log("HttpClient Allow Hostname (admin sul Navigator se fallisce):", e);
+    });
   }
-  console.log("OSD Desk pronto:", peerUrl("/putxml"));
+
+  // La PWA non può fare xSet Config (Not authorized): HttpClient va abilitato da admin sul Navigator.
+  deskHttpReady = true;
+  console.log("OSD Desk target:", peerUrl("/putxml"));
+  console.log(
+    "OSD Desk: se putxml fallisce, in admin Navigator abilitare HttpClient Mode On, AllowInsecureHTTPS On, Allow Hostname per il Desk"
+  );
 }
 
 async function sendDeskCommand(xmlBody) {
-  if (!xapi || !deskHttpReady) {
-    console.log("OSD Desk: HttpClient non pronto");
+  if (!xapi || !deskHost) {
+    console.log("OSD Desk: IP Desk mancante (?desk= nell'URL PWA)");
     return false;
+  }
+  if (!deskHttpReady) {
+    await initDeskHttpClient();
   }
   try {
     const res = await httpPostXml(peerUrl("/putxml"), xmlBody);
     console.log("OSD Desk risposta:", res);
     return true;
   } catch (e) {
+    const msg = JSON.stringify(e);
     console.log("OSD Desk putxml fallito:", e);
+    if (msg.includes("Insecure HTTPS") || msg.includes("hostlist")) {
+      console.log(
+        "OSD Desk: sul Navigator (admin) → HttpClient AllowInsecureHTTPS On + Allow Hostname Add per " +
+          peerHostName()
+      );
+    }
+    if (msg.includes("Not authorized") || msg.includes("Forbidden")) {
+      console.log("OSD Desk: verifica user/password API del Desk in script.js");
+    }
     return false;
   }
 }
