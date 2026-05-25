@@ -101,15 +101,56 @@ function triggerAccessButtonToggle() {
 }
 
 function createRichiestaAccessoDataUri() {
-  const d = "motion";
-  const html =
-    "<!DOCTYPE html><html lang=\"it\"><head><meta charset=\"utf-8\">" +
-    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,user-scalable=no\">" +
-    "<style>html,body{margin:0;height:100vh;width:100vw;overflow:hidden;font-family:Arial,sans-serif;background:#e0e0e0}" +
-    ".wrap{display:table;width:100%;height:100vh}.cell{display:table-cell;vertical-align:middle;text-align:center}" +
-    ".msg{font-size:10vw;font-weight:bold;color:#424242;line-height:1.15}</style></head><body>" +
-  `<${d} class="wrap"><${d} class="cell"><${d} class="msg">Richiesta<br>Accesso</${d}></${d}></${d}></body></html>`;
-  return "data:text/html," + encodeURIComponent(html.replace(/motion/g, "div"));
+  const html = `<!DOCTYPE html>
+  <html lang="it">
+    <head>
+      <meta charset="UTF-8" />
+      <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+      />
+      <style>
+        html,
+        body {
+          overflow: hidden;
+          margin: 0;
+          padding: 0;
+          height: 100vh;
+          width: 100vw;
+        }
+
+        body {
+          background-color: red;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          font-family: Arial, sans-serif;
+        }
+
+        .content {
+          color: red;
+          background-color: white;
+          border: 50px solid red;
+          border-radius: 80px;
+          width: 100vw;
+          height: 100vh;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          font-size: 20vw;
+          font-weight: bold;
+          text-transform: uppercase;
+          letter-spacing: 0.5vw;
+          box-sizing: border-box;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="content">Richiesta Accesso</div>
+    </body>
+  </html>`;
+
+  return "data:text/html, " + html.split("\n").map((line) => line.trim()).join("");
 }
 
 async function showOsdRichiestaAccesso() {
