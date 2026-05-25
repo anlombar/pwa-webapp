@@ -8,8 +8,8 @@ const TEXT_PRESENT = "Direttore Presente";
 const TEXT_ABSENT = "Direttore Assente";
 
 const BUTTON = {
-  present: { label: "Richiedi accesso", bg: BTN_GRAY, fg: TEXT_WHITE, clickable: true },
-  pending: { label: "Attendere Autorizzazione", bg: BTN_RED, fg: TEXT_WHITE, clickable: false },
+  present: { label: "Richiedi Accesso", bg: BTN_GRAY, fg: TEXT_WHITE, clickable: true },
+  pending: { label: "Attendere Autorizzazione", bg: BTN_RED, fg: TEXT_WHITE, clickable: true },
   absent: { label: "Divieto di Accesso", bg: BTN_GRAY, fg: TEXT_RED, clickable: false },
 };
 
@@ -86,7 +86,12 @@ function handleAccessButtonTouch(event) {
 }
 
 function handleAccessButtonClick() {
-  if (!directorPresent || accessRequestPending) return;
+  if (!directorPresent) return;
+  if (accessRequestPending) {
+    accessRequestPending = false;
+    applyUiState(true, false);
+    return;
+  }
   accessRequestPending = true;
   applyUiState(true, true);
 }
