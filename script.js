@@ -23,6 +23,7 @@ let xapi;
 let peopleCountCurrent = 0;
 let accessRequestPending = false;
 let directorPresent = false;
+let lastButtonTapMs = 0;
 
 function boot() {
   topPanel = document.getElementById("topPanel");
@@ -36,8 +37,8 @@ function boot() {
     return;
   }
 
+  accessButton.addEventListener("touchend", handleAccessButtonTouch, { passive: false });
   accessButton.addEventListener("click", handleAccessButtonClick);
-  accessButton.addEventListener("touchend", handleAccessButtonTouch);
 
   applyUiState(false, false);
   init();
@@ -82,18 +83,19 @@ function subscribePeopleCount() {
 
 function handleAccessButtonTouch(event) {
   event.preventDefault();
-  handleAccessButtonClick();
+  triggerAccessButtonToggle();
 }
 
 function handleAccessButtonClick() {
+  if (Date.now() - lastButtonTapMs < 400) return;
+  triggerAccessButtonToggle();
+}
+
+function triggerAccessButtonToggle() {
+  lastButtonTapMs = Date.now();
   if (!directorPresent) return;
-  if (accessRequestPending) {
-    accessRequestPending = false;
-    applyUiState(true, false);
-    return;
-  }
-  accessRequestPending = true;
-  applyUiState(true, true);
+  accessRequestPending = !accessRequestPending;
+  applyUiState(true, accessRequestPending);
 }
 
 function applyUiState(isPresent, isPending) {
