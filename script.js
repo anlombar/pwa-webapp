@@ -9,9 +9,9 @@ const TEXT_ABSENT = "Direttore Assente";
 const OSD_TARGET = "OSD";
 
 /** Desk Pro — oppure ?desk=https://192.168.x.x nell'URL PWA */
-const DESK_HOST = "CHANGE_ME";
+const DESK_HOST = "192.168.254.9";
 const DESK_API_USER = "admin";
-const DESK_API_PASS = "CHANGE_ME";
+const DESK_API_PASS = "Cisco2026!";
 
 const BUTTON = {
   present: { label: "Richiedi Accesso", bg: BTN_GRAY, fg: TEXT_WHITE, clickable: true },
