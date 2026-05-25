@@ -8,6 +8,11 @@ const TEXT_PRESENT = "Direttore Presente";
 const TEXT_ABSENT = "Direttore Assente";
 const OSD_TARGET = "OSD";
 
+/** Desk Pro — oppure ?desk=https://192.168.x.x nell'URL PWA */
+const DESK_HOST = "CHANGE_ME";
+const DESK_API_USER = "admin";
+const DESK_API_PASS = "Cisco2026!";
+
 const BUTTON = {
   present: { label: "Richiedi Accesso", bg: BTN_GRAY, fg: TEXT_WHITE, clickable: true },
   pending: { label: "Attendere Autorizzazione", bg: BTN_RED, fg: TEXT_WHITE, clickable: true },
@@ -26,6 +31,8 @@ let accessRequestPending = false;
 let directorPresent = false;
 let lastButtonTapMs = 0;
 let osdRichiestaVisible = false;
+let deskHost = "";
+let deskHttpReady = false;
 
 function boot() {
   topPanel = document.getElementById("topPanel");
@@ -52,11 +59,172 @@ async function init() {
   try {
     xapi = await window.getXAPI();
     await xapi.Config.UserInterface.LedControl.Mode.set("Manual");
+    deskHost = resolveDeskHost();
+    await initDeskHttpClient();
     await readPeopleCount();
     subscribePeopleCount();
   } catch (e) {
     console.log("Impossibile connettersi al device:", e);
     applyUiState(false, false);
+  }
+}
+
+function resolveDeskHost() {
+  const fromUrl = new URLSearchParams(window.location.search).get("desk");
+  if (fromUrl) return peerBaseUrl(fromUrl);
+  if (DESK_HOST && DESK_HOST !== "CHANGE_ME") return peerBaseUrl(DESK_HOST);
+  return "";
+}
+
+function peerBaseUrl(hostSetting) {
+  let base = String(hostSetting).trim().replace(/\/+$/, "");
+  if (!/^https?:\/\//i.test(base)) {
+    base = "https://" + base;
+  }
+  return base;
+}
+
+function peerUrl(path) {
+  const p = path.startsWith("/") ? path : "/" + path;
+  return deskHost + p;
+}
+
+function peerHostName() {
+  try {
+    return new URL(deskHost).hostname;
+  } catch {
+    return "";
+  }
+}
+
+function authHeader() {
+  if (!DESK_API_USER || !DESK_API_PASS || DESK_API_PASS === "CHANGE_ME") {
+    return "";
+  }
+  return "Authorization: Basic " + base64Encode(DESK_API_USER + ":" + DESK_API_PASS);
+}
+
+function base64Encode(text) {
+  if (typeof btoa === "function") {
+    return btoa(text);
+  }
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const a = text.charCodeAt(i++);
+    const b = i < text.length ? text.charCodeAt(i++) : 0;
+    const c = i < text.length ? text.charCodeAt(i++) : 0;
+    const n = (a << 16) | (b << 8) | c;
+    out +=
+      chars[(n >> 18) & 63] +
+      chars[(n >> 12) & 63] +
+      chars[(n >> 6) & 63] +
+      chars[n & 63];
+  }
+  const pad = text.length % 3;
+  if (pad === 1) out = out.slice(0, -2) + "==";
+  if (pad === 2) out = out.slice(0, -1) + "=";
+  return out;
+}
+
+function httpClientParams(url, headers) {
+  return {
+    Url: url,
+    Header: headers,
+    Timeout: 8,
+    AllowInsecureHTTPS: "True",
+    ResultBody: "PlainText",
+  };
+}
+
+async function httpPostXml(url, xmlBody) {
+  const headers = ["Content-Type: application/xml"];
+  const auth = authHeader();
+  if (auth) headers.push(auth);
+  return xapi.Command.HttpClient.Post(httpClientParams(url, headers), xmlBody);
+}
+
+function escapeXml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function webViewDisplayXml(title, url) {
+  return (
+    "<Command><UserInterface><WebView><Display>" +
+    "<Mode>Modal</Mode>" +
+    "<Target>" +
+    escapeXml(OSD_TARGET) +
+    "</Target>" +
+    "<Title>" +
+    escapeXml(title) +
+    "</Title>" +
+    "<Url>" +
+    escapeXml(url) +
+    "</Url>" +
+    "</Display></WebView></UserInterface></Command>"
+  );
+}
+
+function webViewClearXml() {
+  return (
+    "<Command><UserInterface><WebView><Clear>" +
+    "<Target>" +
+    escapeXml(OSD_TARGET) +
+    "</Target>" +
+    "</Clear></WebView></UserInterface></Command>"
+  );
+}
+
+async function initDeskHttpClient() {
+  deskHttpReady = false;
+  if (!deskHost) {
+    console.log(
+      "OSD Desk: aggiungi ?desk=https://IP_DESK all'URL PWA oppure imposta DESK_HOST in script.js"
+    );
+    return;
+  }
+
+  await xapi.Config.HttpClient.Mode.set("On").catch(() => {});
+  await xapi.Config.HttpClient.AllowHTTP.set("On").catch(() => {});
+
+  let insecure = "Off";
+  try {
+    insecure = await xapi.Config.HttpClient.AllowInsecureHTTPS.get();
+  } catch (e) {
+    console.log("AllowInsecureHTTPS.get:", e);
+  }
+  deskHttpReady = String(insecure).toLowerCase() === "on" || insecure === true;
+  if (!deskHttpReady) {
+    console.log(
+      "OSD Desk: abilitare sul Navigator xConfiguration HttpClient AllowInsecureHTTPS On"
+    );
+    return;
+  }
+
+  const host = peerHostName();
+  if (host) {
+    await xapi.Command.HttpClient.Allow.Hostname.Add({ Hostname: host }).catch(() => {});
+  }
+  console.log("OSD Desk pronto:", peerUrl("/putxml"));
+}
+
+async function sendDeskCommand(xmlBody) {
+  if (!xapi || !deskHttpReady) {
+    console.log("OSD Desk: HttpClient non pronto");
+    return false;
+  }
+  try {
+    const res = await httpPostXml(peerUrl("/putxml"), xmlBody);
+    console.log("OSD Desk risposta:", res);
+    return true;
+  } catch (e) {
+    console.log("OSD Desk putxml fallito:", e);
+    return false;
   }
 }
 
@@ -154,30 +322,19 @@ function createRichiestaAccessoDataUri() {
 }
 
 async function showOsdRichiestaAccesso() {
-  if (!xapi || osdRichiestaVisible) return;
-  try {
-    await xapi.Command.UserInterface.WebView.Display({
-      Mode: "Modal",
-      Target: OSD_TARGET,
-      Title: "Richiesta Accesso",
-      Url: createRichiestaAccessoDataUri(),
-    });
+  if (osdRichiestaVisible) return;
+  const url = createRichiestaAccessoDataUri();
+  const ok = await sendDeskCommand(webViewDisplayXml("Richiesta Accesso", url));
+  if (ok) {
     osdRichiestaVisible = true;
-    console.log("OSD: Richiesta Accesso mostrata");
-  } catch (e) {
-    console.log("OSD Display fallito:", e);
+    console.log("OSD Desk: Richiesta Accesso mostrata");
   }
 }
 
 async function clearOsdRichiestaAccesso() {
-  if (!xapi) return;
-  try {
-    await xapi.Command.UserInterface.WebView.Clear({ Target: OSD_TARGET });
-    console.log("OSD: Richiesta Accesso chiusa");
-  } catch (e) {
-    console.log("OSD Clear fallito:", e);
-  }
+  await sendDeskCommand(webViewClearXml());
   osdRichiestaVisible = false;
+  console.log("OSD Desk: Richiesta Accesso chiusa");
 }
 
 async function syncOsdWithPending(isPending) {
