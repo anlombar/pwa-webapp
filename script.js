@@ -46,38 +46,33 @@ async function init() {
     await readPeopleCount();
     subscribePeopleCount();
   } catch (e) {
-    roomStatus.textContent = "Init Error: " + e.message;
+    roomStatus.textContent = "Init Err: " + e.message;
     applyUiState(false, false);
   }
 }
 
-// --- Comandi Nativi (WebView) ---
+// --- Comandi Nativi (TextLine) ---
 
 async function showOsdRichiestaAccesso() {
   try {
-    // Utilizziamo WebView.Display via JSON-RPC nativo
-    // Questo è il metodo più compatibile per mostrare contenuti a video
-    await xapi.Command.UserInterface.WebView.Display({
-      Mode: "Modal",
-      Target: "OSD",
-      Title: "RICHIESTA DI ACCESSO",
-      Url: "data:text/html,<html><body style='display:flex; justify-content:center; align-items:center; height:100vh; background:white; font-size:8vw; font-weight:bold; color:red; font-family:sans-serif; text-transform:uppercase;'>RICHIESTA DI ACCESSO</body></html>"
+    // Risveglia il dispositivo se è in standby
+    await xapi.Command.Standby.Deactivate();
+    
+    // Invia il messaggio di testo
+    await xapi.Command.UserInterface.Message.TextLine.Display({
+      Duration: 120,
+      Text: "RICHIESTA DI ACCESSO"
     });
     osdRichiestaVisible = true;
   } catch (e) {
-    roomStatus.textContent = "WV Err: " + e.message;
+    roomStatus.textContent = "TL Err: " + e.message;
   }
 }
 
 async function clearOsdRichiestaAccesso() {
-  try {
-    await xapi.Command.UserInterface.WebView.Clear({
-      Target: "OSD"
-    });
-    osdRichiestaVisible = false;
-  } catch (e) {
-    roomStatus.textContent = "Clear Err: " + e.message;
-  }
+  // TextLine non ha un comando Clear, il testo sparisce da solo.
+  // Se necessario, potresti inviare un testo vuoto o ignorare.
+  osdRichiestaVisible = false;
 }
 
 async function syncOsdWithPending(isPending) {
@@ -94,7 +89,7 @@ function applyUiState(isPresent, isPending) {
   if (isPresent) {
     topPanel.style.backgroundColor = PRESENT_COLOR;
     bottomPanel.style.backgroundColor = PRESENT_COLOR;
-    if (!roomStatus.textContent.startsWith("WV")) roomStatus.textContent = TEXT_PRESENT;
+    if (!roomStatus.textContent.startsWith("TL")) roomStatus.textContent = TEXT_PRESENT;
     
     setAccessButton(accessRequestPending ? "pending" : "present");
     syncOsdWithPending(accessRequestPending);
