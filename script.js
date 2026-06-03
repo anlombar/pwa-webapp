@@ -51,12 +51,13 @@ async function init() {
   }
 }
 
-// --- Comando Prompt (Massima compatibilità) ---
+// --- Comandi Nativi (Prompt.Display) ---
 
 async function showOsdRichiestaAccesso() {
   try {
+    if (!xapi) xapi = await window.getXAPI();
+    
     // Risveglia il dispositivo
-    xapi = await window.getXAPI();
     await xapi.Command.Standby.Deactivate();
     
     // Comando Prompt: crea un popup di sistema nativo
@@ -67,14 +68,17 @@ async function showOsdRichiestaAccesso() {
       OptionId: ["1"],
       OptionText: ["OK"]
     });
+    
     osdRichiestaVisible = true;
   } catch (e) {
     roomStatus.textContent = "Prompt Err: " + e.message;
+    console.error("Errore invio Prompt:", e);
   }
 }
 
 async function clearOsdRichiestaAccesso() {
   try {
+    if (!xapi) xapi = await window.getXAPI();
     await xapi.Command.UserInterface.Message.Prompt.Clear();
     osdRichiestaVisible = false;
   } catch (e) {
@@ -96,7 +100,11 @@ function applyUiState(isPresent, isPending) {
   if (isPresent) {
     topPanel.style.backgroundColor = PRESENT_COLOR;
     bottomPanel.style.backgroundColor = PRESENT_COLOR;
-    if (!roomStatus.textContent.startsWith("Prompt")) roomStatus.textContent = TEXT_PRESENT;
+    
+    // Aggiorniamo il testo solo se non ci sono errori di debug
+    if (!roomStatus.textContent.startsWith("Prompt") && !roomStatus.textContent.startsWith("Clear")) {
+        roomStatus.textContent = TEXT_PRESENT;
+    }
     
     setAccessButton(accessRequestPending ? "pending" : "present");
     syncOsdWithPending(accessRequestPending);
