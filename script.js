@@ -7,10 +7,6 @@ const TEXT_RED = "#e53935";
 const TEXT_PRESENT = "Direttore Presente";
 const TEXT_ABSENT = "Direttore Assente";
 
-const DESK_HOST = "192.168.254.9";
-const DESK_API_USER = "admin";
-const DESK_API_PASS = "Cisco2026!";
-
 const BUTTON = {
   present: { label: "Richiedi Accesso", bg: BTN_GRAY, fg: TEXT_WHITE, clickable: true },
   pending: { label: "Attendere Autorizzazione", bg: BTN_RED, fg: TEXT_WHITE, clickable: true },
@@ -24,8 +20,6 @@ let accessRequestPending = false;
 let directorPresent = false;
 let lastButtonTapMs = 0;
 let osdRichiestaVisible = false;
-let deskHost = "";
-let deskHttpReady = false;
 
 function boot() {
   topPanel = document.getElementById("topPanel");
@@ -49,8 +43,6 @@ async function init() {
   try {
     xapi = await window.getXAPI();
     await xapi.Config.UserInterface.LedControl.Mode.set("Manual");
-    deskHost = resolveDeskHost();
-    await initDeskHttpClient();
     await readPeopleCount();
     subscribePeopleCount();
   } catch (e) {
@@ -59,81 +51,37 @@ async function init() {
   }
 }
 
-// --- Funzioni di Rete e XML ---
+// --- Comandi Nativi (Comunicazione diretta via Pairing) ---
 
-function resolveDeskHost() {
-  const fromUrl = new URLSearchParams(window.location.search).get("desk");
-  if (fromUrl) return peerBaseUrl(fromUrl);
-  return DESK_HOST && DESK_HOST !== "CHANGE_ME" ? peerBaseUrl(DESK_HOST) : "";
-}
-
-function peerBaseUrl(hostSetting) {
-  let base = String(hostSetting).trim().replace(/\/+$/, "");
-  return /^https?:\/\//i.test(base) ? base : "https://" + base;
-}
-
-function peerUrl(path) { return deskHost + (path.startsWith("/") ? path : "/" + path); }
-
-function authHeader() {
-  if (!DESK_API_USER || !DESK_API_PASS) return "";
-  return "Authorization: Basic " + btoa(DESK_API_USER + ":" + DESK_API_PASS);
-}
-
-function escapeXml(value) {
-  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-// Alert senza tag Target (comando nativo del dispositivo ricevente)
-function alertDisplayXml(text, duration) {
-  return `<Command><UserInterface><Message><Alert><Display><Duration>${duration}</Duration><Text>${escapeXml(text)}</Text></Display></Alert></Message></UserInterface></Command>`;
-}
-
-function alertClearXml() {
-  return `<Command><UserInterface><Message><Alert><Clear/></Alert></Message></UserInterface></Command>`;
-}
-
-async function initDeskHttpClient() {
-  if (!deskHost) return;
+async function showOsdRichiestaAccesso() {
   try {
-    const host = new URL(deskHost).hostname;
-    await xapi.Command.HttpClient.Allow.Hostname.Add({ Hostname: host });
-    deskHttpReady = true;
-  } catch (e) { deskHttpReady = true; }
-}
-
-async function sendDeskCommand(xmlBody) {
-  if (!xapi || !deskHost) return false;
-  try {
-    const res = await xapi.Command.HttpClient.Post({ 
-      Url: peerUrl("/putxml"), 
-      Header: ["Content-Type: application/xml", authHeader()], 
-      Timeout: 8, 
-      AllowInsecureHTTPS: "True" 
-    }, xmlBody);
-    console.log("Risposta Desk Pro:", res);
-    return true;
-  } catch (e) { 
-    console.error("Errore invio XML al Desk Pro:", e); 
-    return false; 
+    await xapi.Command.UserInterface.Message.Alert.Display({
+      Duration: 120,
+      Text: "RICHIESTA DI ACCESSO"
+    });
+    osdRichiestaVisible = true;
+    console.log("Alert inviato con successo al dispositivo accoppiato");
+  } catch (e) {
+    console.error("Errore invio Alert:", e);
   }
 }
 
-// --- Logica di Stato e UI ---
-
-async function showOsdRichiestaAccesso() {
-  const ok = await sendDeskCommand(alertDisplayXml("RICHIESTA DI ACCESSO", 120));
-  if (ok) osdRichiestaVisible = true;
-}
-
 async function clearOsdRichiestaAccesso() {
-  const ok = await sendDeskCommand(alertClearXml());
-  if (ok) osdRichiestaVisible = false;
+  try {
+    await xapi.Command.UserInterface.Message.Alert.Clear();
+    osdRichiestaVisible = false;
+    console.log("Alert rimosso");
+  } catch (e) {
+    console.error("Errore rimozione Alert:", e);
+  }
 }
 
 async function syncOsdWithPending(isPending) {
   if (isPending && !osdRichiestaVisible) await showOsdRichiestaAccesso();
   else if (!isPending && osdRichiestaVisible) await clearOsdRichiestaAccesso();
 }
+
+// --- Logica di Stato e UI ---
 
 function applyUiState(isPresent, isPending) {
   directorPresent = isPresent;
