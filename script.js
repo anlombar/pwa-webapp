@@ -6,7 +6,6 @@ const TEXT_WHITE = "#ffffff";
 const TEXT_RED = "#e53935";
 const TEXT_PRESENT = "Direttore Presente";
 const TEXT_ABSENT = "Direttore Assente";
-const OSD_TARGET = "OSD";
 
 const DESK_HOST = "192.168.254.9";
 const DESK_API_USER = "admin";
@@ -55,7 +54,7 @@ async function init() {
     await readPeopleCount();
     subscribePeopleCount();
   } catch (e) {
-    console.error("Errore init:", e);
+    console.error("Errore inizializzazione:", e);
     applyUiState(false, false);
   }
 }
@@ -84,8 +83,9 @@ function escapeXml(value) {
   return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+// Alert senza tag Target (comando nativo del dispositivo ricevente)
 function alertDisplayXml(text, duration) {
-  return `<Command><UserInterface><Message><Alert><Display><Duration>${duration}</Duration><Target>${OSD_TARGET}</Target><Text>${escapeXml(text)}</Text></Display></Alert></Message></UserInterface></Command>`;
+  return `<Command><UserInterface><Message><Alert><Display><Duration>${duration}</Duration><Text>${escapeXml(text)}</Text></Display></Alert></Message></UserInterface></Command>`;
 }
 
 function alertClearXml() {
@@ -104,14 +104,18 @@ async function initDeskHttpClient() {
 async function sendDeskCommand(xmlBody) {
   if (!xapi || !deskHost) return false;
   try {
-    await xapi.Command.HttpClient.Post({ 
+    const res = await xapi.Command.HttpClient.Post({ 
       Url: peerUrl("/putxml"), 
       Header: ["Content-Type: application/xml", authHeader()], 
       Timeout: 8, 
       AllowInsecureHTTPS: "True" 
     }, xmlBody);
+    console.log("Risposta Desk Pro:", res);
     return true;
-  } catch (e) { console.error("Errore invio XML:", e); return false; }
+  } catch (e) { 
+    console.error("Errore invio XML al Desk Pro:", e); 
+    return false; 
+  }
 }
 
 // --- Logica di Stato e UI ---
