@@ -8,7 +8,6 @@ const TEXT_PRESENT = "Direttore Presente";
 const TEXT_ABSENT = "Direttore Assente";
 const OSD_TARGET = "OSD";
 
-/** Desk Pro — oppure ?desk=https://192.168.x.x nell'URL PWA */
 const DESK_HOST = "192.168.254.9";
 const DESK_API_USER = "admin";
 const DESK_API_PASS = "Cisco2026!";
@@ -56,6 +55,7 @@ async function init() {
     await readPeopleCount();
     subscribePeopleCount();
   } catch (e) {
+    console.error("Errore init:", e);
     applyUiState(false, false);
   }
 }
@@ -104,9 +104,14 @@ async function initDeskHttpClient() {
 async function sendDeskCommand(xmlBody) {
   if (!xapi || !deskHost) return false;
   try {
-    await xapi.Command.HttpClient.Post({ Url: peerUrl("/putxml"), Header: ["Content-Type: application/xml", authHeader()], Timeout: 8, AllowInsecureHTTPS: "True" }, xmlBody);
+    await xapi.Command.HttpClient.Post({ 
+      Url: peerUrl("/putxml"), 
+      Header: ["Content-Type: application/xml", authHeader()], 
+      Timeout: 8, 
+      AllowInsecureHTTPS: "True" 
+    }, xmlBody);
     return true;
-  } catch (e) { return false; }
+  } catch (e) { console.error("Errore invio XML:", e); return false; }
 }
 
 // --- Logica di Stato e UI ---
