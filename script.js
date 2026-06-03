@@ -46,37 +46,33 @@ async function init() {
     await readPeopleCount();
     subscribePeopleCount();
   } catch (e) {
-    console.error("Errore inizializzazione xAPI:", e);
+    roomStatus.textContent = "Init Error: " + e.message;
     applyUiState(false, false);
   }
 }
 
-// --- Comandi Nativi (Comunicazione diretta via Pairing) ---
+// --- Comandi Nativi con Debug Visivo ---
 
 async function showOsdRichiestaAccesso() {
   try {
-    console.log("Invio Alert al Desk Pro...");
+    // Comando semplificato per massima compatibilità
     await xapi.Command.UserInterface.Message.Alert.Display({
       Duration: 120,
-      Text: "RICHIESTA DI ACCESSO",
-      Target: "OSD"
+      Text: "RICHIESTA DI ACCESSO"
     });
     osdRichiestaVisible = true;
-    console.log("Alert inviato con successo con Target OSD");
   } catch (e) {
-    console.error("Errore invio Alert:", e);
+    // Se fallisce, scriviamo l'errore sul display del Navigator
+    roomStatus.textContent = "Alert Err: " + e.message;
   }
 }
 
 async function clearOsdRichiestaAccesso() {
   try {
-    await xapi.Command.UserInterface.Message.Alert.Clear({
-      Target: "OSD"
-    });
+    await xapi.Command.UserInterface.Message.Alert.Clear();
     osdRichiestaVisible = false;
-    console.log("Alert rimosso");
   } catch (e) {
-    console.error("Errore rimozione Alert:", e);
+    roomStatus.textContent = "Clear Err: " + e.message;
   }
 }
 
@@ -94,7 +90,9 @@ function applyUiState(isPresent, isPending) {
   if (isPresent) {
     topPanel.style.backgroundColor = PRESENT_COLOR;
     bottomPanel.style.backgroundColor = PRESENT_COLOR;
-    roomStatus.textContent = TEXT_PRESENT;
+    // Aggiorniamo il testo solo se non ci sono errori di debug
+    if (!roomStatus.textContent.startsWith("Err")) roomStatus.textContent = TEXT_PRESENT;
+    
     setAccessButton(accessRequestPending ? "pending" : "present");
     syncOsdWithPending(accessRequestPending);
     xapi?.Command?.UserInterface?.LedControl?.Color?.Set({ Color: "Green" }).catch(() => {});
