@@ -3,96 +3,155 @@ const ABSENT_COLOR = "#ff9800";
 const TEXT_PRESENT = "Direttore Presente";
 const TEXT_ABSENT = "Direttore Assente";
 
+/** TextLine su display RoomOS (codec / periferica) */
+const TEXTLINE = {
+  duration: 120,
+  x: 500,
+  y: 500,
+  target: "OSD",
+  text: "RICHIESTA DI ACCESSO",
+  peripheralId: null,
+};
+
 let xapi;
 let directorPresent = false;
 let accessRequestPending = false;
+let textLineVisible = false;
 
 function boot() {
   document.addEventListener("DOMContentLoaded", async () => {
     try {
       xapi = await window.getXAPI();
-      // Setup iniziale
+
       await xapi.Config.UserInterface.LedControl.Mode.set("Manual");
-      
-      // Monitoraggio presenza
+      await resolveTextLinePeripheralId();
+
       xapi.Status.RoomAnalytics.PeopleCount.Current.on((count) => {
-        let c = parseInt(count == "-1" ? 0 : count, 10) || 0;
-        directorPresent = (c >= 1);
+        const c = parseInt(count == "-1" ? 0 : count, 10) || 0;
+        directorPresent = c >= 1;
+        if (!directorPresent) {
+          accessRequestPending = false;
+        }
         updateUI();
       });
 
-      // Lettura iniziale
-      let initialCount = await xapi.Status.RoomAnalytics.PeopleCount.Current.get();
-      directorPresent = (parseInt(initialCount == "-1" ? 0 : initialCount, 10) >= 1);
+      const initialCount = await xapi.Status.RoomAnalytics.PeopleCount.Current.get();
+      directorPresent =
+        (parseInt(initialCount == "-1" ? 0 : initialCount, 10) || 0) >= 1;
       updateUI();
 
-      // Eventi pulsante
       document.getElementById("accessButton").addEventListener("click", () => {
         if (directorPresent) {
           accessRequestPending = !accessRequestPending;
           updateUI();
         }
       });
-
     } catch (e) {
       console.error("Init error:", e);
     }
   });
 }
 
-async function showMessage(text) {
+async function resolveTextLinePeripheralId() {
+  if (!xapi) return;
+
   try {
-    // Risveglia lo schermo
+    const devices = await xapi.Status.Peripherals.ConnectedDevice.get();
+    const list = Array.isArray(devices) ? devices : [devices];
+    const navigator = list.find(
+      (d) =>
+        d.Type === "TouchPanel" &&
+        (String(d.Name || "").includes("Navigator") || d.Location === "InsideRoom")
+    );
+
+    if (navigator?.id != null) {
+      TEXTLINE.peripheralId = parseInt(navigator.id, 10);
+      console.log("TextLine PeripheralId:", TEXTLINE.peripheralId);
+    }
+  } catch (e) {
+    console.log("PeripheralId non risolto (Display senza PeripheralId):", e);
+  }
+}
+
+function textLineDisplayParams(text) {
+  const params = {
+    Duration: TEXTLINE.duration,
+    Text: text,
+    X: TEXTLINE.x,
+    Y: TEXTLINE.y,
+  };
+
+  if (TEXTLINE.target) {
+    params.Target = TEXTLINE.target;
+  }
+  if (TEXTLINE.peripheralId != null && !Number.isNaN(TEXTLINE.peripheralId)) {
+    params.PeripheralId = TEXTLINE.peripheralId;
+  }
+
+  return params;
+}
+
+async function showMessage(text) {
+  if (!xapi) return;
+
+  try {
     await xapi.Command.Standby.Deactivate();
-    
-    // Comando TextLine: il più compatibile in assoluto
-    await xapi.Command.UserInterface.Message.TextLine.Display({
-      Duration: 120,
-      Text: text,
-      X: 500,
-      Y: 500
-    });
+    await xapi.Command.UserInterface.Message.TextLine.Display(
+      textLineDisplayParams(text)
+    );
+    textLineVisible = true;
   } catch (e) {
     console.error("Errore invio messaggio:", e);
   }
 }
 
 async function clearMessage() {
-  // TextLine non ha un Clear, inviamo un testo vuoto o ignoriamo
-  // In alternativa puoi provare a inviare un Alert.Clear se il sistema lo accetta
+  if (!xapi || !textLineVisible) return;
+
   try {
-    await xapi.Command.UserInterface.Message.Alert.Clear();
-  } catch (e) {}
+    await xapi.Command.UserInterface.Message.TextLine.Clear();
+  } catch (e) {
+    console.error("Errore clear messaggio:", e);
+  } finally {
+    textLineVisible = false;
+  }
 }
 
 function updateUI() {
   const status = document.getElementById("roomStatus");
-  const panel = document.getElementById("topPanel");
+  const topPanel = document.getElementById("topPanel");
+  const bottomPanel = document.getElementById("bottomPanel");
   const btn = document.getElementById("accessButton");
   const btnLabel = document.getElementById("accessButtonLabel");
 
   if (directorPresent) {
-    panel.style.backgroundColor = PRESENT_COLOR;
+    topPanel.style.backgroundColor = PRESENT_COLOR;
+    if (bottomPanel) bottomPanel.style.backgroundColor = PRESENT_COLOR;
     status.textContent = TEXT_PRESENT;
     btnLabel.textContent = accessRequestPending ? "Attendere..." : "Richiedi Accesso";
     btn.style.backgroundColor = accessRequestPending ? "#e53935" : "#9e9e9e";
-    
+
     if (accessRequestPending) {
-      showMessage("RICHIESTA DI ACCESSO");
-      xapi?.Command?.UserInterface?.LedControl?.Color?.Set({ Color: "Green" });
+      showMessage(TEXTLINE.text);
     } else {
       clearMessage();
-      xapi?.Command?.UserInterface?.LedControl?.Color?.Set({ Color: "Green" });
     }
-  } else {
-    panel.style.backgroundColor = ABSENT_COLOR;
-    status.textContent = TEXT_ABSENT;
-    btnLabel.textContent = "Divieto di Accesso";
-    btn.style.backgroundColor = "#9e9e9e";
-    accessRequestPending = false;
-    clearMessage();
-    xapi?.Command?.UserInterface?.LedControl?.Color?.Set({ Color: "Yellow" });
+    xapi?.Command?.UserInterface?.LedControl?.Color?.Set({ Color: "Green" }).catch(
+      () => {}
+    );
+    return;
   }
+
+  topPanel.style.backgroundColor = ABSENT_COLOR;
+  if (bottomPanel) bottomPanel.style.backgroundColor = ABSENT_COLOR;
+  status.textContent = TEXT_ABSENT;
+  btnLabel.textContent = "Divieto di Accesso";
+  btn.style.backgroundColor = "#9e9e9e";
+  accessRequestPending = false;
+  clearMessage();
+  xapi?.Command?.UserInterface?.LedControl?.Color?.Set({ Color: "Yellow" }).catch(
+    () => {}
+  );
 }
 
 boot();
