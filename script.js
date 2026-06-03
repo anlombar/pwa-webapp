@@ -46,7 +46,7 @@ async function init() {
     await readPeopleCount();
     subscribePeopleCount();
   } catch (e) {
-    console.error("Errore inizializzazione:", e);
+    console.error("Errore inizializzazione xAPI:", e);
     applyUiState(false, false);
   }
 }
@@ -55,12 +55,14 @@ async function init() {
 
 async function showOsdRichiestaAccesso() {
   try {
+    console.log("Invio Alert al Desk Pro...");
     await xapi.Command.UserInterface.Message.Alert.Display({
       Duration: 120,
-      Text: "RICHIESTA DI ACCESSO"
+      Text: "RICHIESTA DI ACCESSO",
+      Target: "OSD"
     });
     osdRichiestaVisible = true;
-    console.log("Alert inviato con successo al dispositivo accoppiato");
+    console.log("Alert inviato con successo con Target OSD");
   } catch (e) {
     console.error("Errore invio Alert:", e);
   }
@@ -68,7 +70,9 @@ async function showOsdRichiestaAccesso() {
 
 async function clearOsdRichiestaAccesso() {
   try {
-    await xapi.Command.UserInterface.Message.Alert.Clear();
+    await xapi.Command.UserInterface.Message.Alert.Clear({
+      Target: "OSD"
+    });
     osdRichiestaVisible = false;
     console.log("Alert rimosso");
   } catch (e) {
