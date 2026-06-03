@@ -56,6 +56,7 @@ async function init() {
 async function showOsdRichiestaAccesso() {
   try {
     // Risveglia il dispositivo
+    xapi = await window.getXAPI();
     await xapi.Command.Standby.Deactivate();
     
     // Comando Prompt: crea un popup di sistema nativo
