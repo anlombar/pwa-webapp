@@ -51,25 +51,29 @@ async function init() {
   }
 }
 
-// --- Comandi Nativi con Debug Visivo ---
+// --- Comandi Nativi (WebView) ---
 
 async function showOsdRichiestaAccesso() {
   try {
-    // Comando semplificato per massima compatibilità
-    await xapi.Command.UserInterface.Message.Alert.Display({
-      Duration: 120,
-      Text: "RICHIESTA DI ACCESSO"
+    // Utilizziamo WebView.Display via JSON-RPC nativo
+    // Questo è il metodo più compatibile per mostrare contenuti a video
+    await xapi.Command.UserInterface.WebView.Display({
+      Mode: "Modal",
+      Target: "OSD",
+      Title: "RICHIESTA DI ACCESSO",
+      Url: "data:text/html,<html><body style='display:flex; justify-content:center; align-items:center; height:100vh; background:white; font-size:8vw; font-weight:bold; color:red; font-family:sans-serif; text-transform:uppercase;'>RICHIESTA DI ACCESSO</body></html>"
     });
     osdRichiestaVisible = true;
   } catch (e) {
-    // Se fallisce, scriviamo l'errore sul display del Navigator
-    roomStatus.textContent = "Alert Err: " + e.message;
+    roomStatus.textContent = "WV Err: " + e.message;
   }
 }
 
 async function clearOsdRichiestaAccesso() {
   try {
-    await xapi.Command.UserInterface.Message.Alert.Clear();
+    await xapi.Command.UserInterface.WebView.Clear({
+      Target: "OSD"
+    });
     osdRichiestaVisible = false;
   } catch (e) {
     roomStatus.textContent = "Clear Err: " + e.message;
@@ -90,8 +94,7 @@ function applyUiState(isPresent, isPending) {
   if (isPresent) {
     topPanel.style.backgroundColor = PRESENT_COLOR;
     bottomPanel.style.backgroundColor = PRESENT_COLOR;
-    // Aggiorniamo il testo solo se non ci sono errori di debug
-    if (!roomStatus.textContent.startsWith("Err")) roomStatus.textContent = TEXT_PRESENT;
+    if (!roomStatus.textContent.startsWith("WV")) roomStatus.textContent = TEXT_PRESENT;
     
     setAccessButton(accessRequestPending ? "pending" : "present");
     syncOsdWithPending(accessRequestPending);
