@@ -1,14 +1,11 @@
 /**
- * Test minimo Room Navigator / RoomOS — solo TextLine.Display + log errori xAPI.
+ * Test messaggi xAPI da PWA Navigator.
+ * TextLine.Display spesso NON esiste (errore "Method not found") — si prova anche Alert.
  */
 
-const TEXTLINE = {
+const MESSAGE = {
   duration: 60,
-  x: 0,
-  y: 0,
-  target: null,
-  text: "TEST TextLine da PWA",
-  peripheralId: null,
+  text: "TEST messaggio da PWA",
 };
 
 const SKIP_STANDBY = true;
@@ -40,46 +37,11 @@ function formatError(e) {
   }
 }
 
-function buildParams(options) {
-  const params = {
-    Duration: TEXTLINE.duration,
-    Text: TEXTLINE.text,
-    X: options.x,
-    Y: options.y,
-  };
-  if (options.target) params.Target = options.target;
-  if (options.peripheralId != null && !Number.isNaN(options.peripheralId)) {
-    params.PeripheralId = options.peripheralId;
-  }
-  return params;
-}
-
-async function resolvePeripheralId(xapi) {
-  try {
-    const devices = await xapi.Status.Peripherals.ConnectedDevice.get();
-    const list = Array.isArray(devices) ? devices : [devices];
-    const nav = list.find(
-      (d) =>
-        d.Type === "TouchPanel" &&
-        (String(d.Name || "").includes("Navigator") || d.Location === "InsideRoom")
-    );
-    if (nav?.id != null) {
-      TEXTLINE.peripheralId = parseInt(nav.id, 10);
-      log("PeripheralId Navigator: " + TEXTLINE.peripheralId);
-    } else {
-      log("Nessun Navigator in ConnectedDevice");
-    }
-  } catch (e) {
-    log("ConnectedDevice: " + formatError(e));
-  }
-}
-
-async function tryDisplay(xapi, label, params) {
+async function tryCommand(xapi, label, fn) {
   log("");
   log("--- " + label + " ---");
-  log(JSON.stringify(params));
   try {
-    await xapi.Command.UserInterface.Message.TextLine.Display(params);
+    await fn();
     log("OK: " + label);
     return true;
   } catch (e) {
@@ -89,62 +51,92 @@ async function tryDisplay(xapi, label, params) {
   }
 }
 
-async function runTest(xapi) {
-  if (!SKIP_STANDBY) {
+async function logDeviceInfo(xapi) {
+  const paths = [
+    ["Status", "SystemUnit", "SoftwareVersion"],
+    ["Status", "SystemUnit", "ProductId"],
+    ["Status", "SystemUnit", "TouchPanel", "Mode"],
+  ];
+  for (const parts of paths) {
     try {
-      await xapi.Command.Standby.Deactivate();
-      log("Standby.Deactivate OK");
+      let node = xapi;
+      for (const p of parts) node = node[p];
+      const val = await node.get();
+      log(parts.join(".") + ": " + val);
     } catch (e) {
-      log("Standby.Deactivate (spesso fallisce se non in standby):");
-      log(formatError(e));
+      log(parts.join(".") + ": (n/d) " + formatError(e));
     }
-  } else {
-    log("Standby.Deactivate saltato (SKIP_STANDBY=true)");
   }
 
-  const attempts = [
-    ["minimo (Text,X,Y,Duration)", buildParams({ x: 0, y: 0 })],
-    [
-      "con coordinate 500,500",
-      buildParams({ x: TEXTLINE.x || 500, y: TEXTLINE.y || 500 }),
-    ],
-    ["con Target OSD", buildParams({ x: 0, y: 0, target: "OSD" })],
-    [
-      "con PeripheralId",
-      buildParams({ x: 0, y: 0, peripheralId: TEXTLINE.peripheralId }),
-    ],
-    [
-      "tutto",
-      buildParams({
-        x: 500,
-        y: 500,
-        target: "OSD",
-        peripheralId: TEXTLINE.peripheralId,
-      }),
-    ],
-  ];
+  try {
+    const devices = await xapi.Status.Peripherals.ConnectedDevice.get();
+    const list = Array.isArray(devices) ? devices : [devices];
+    log("ConnectedDevice count: " + list.length);
+    list.slice(0, 5).forEach((d, i) => {
+      log("  [" + i + "] id=" + d.id + " " + d.Type + " " + (d.Name || ""));
+    });
+  } catch (e) {
+    log("ConnectedDevice: " + formatError(e));
+  }
+}
 
-  for (const [label, params] of attempts) {
-    if (params.PeripheralId == null && label.includes("PeripheralId")) {
-      log("Skip " + label + " (nessun PeripheralId)");
-      continue;
+async function runTests(xapi) {
+  if (!SKIP_STANDBY) {
+    await tryCommand(xapi, "Standby.Deactivate", () =>
+      xapi.Command.Standby.Deactivate()
+    );
+  } else {
+    log("Standby.Deactivate saltato");
+  }
+
+  const textLineOk = await tryCommand(
+    xapi,
+    "TextLine.Display (minimo)",
+    () =>
+      xapi.Command.UserInterface.Message.TextLine.Display({
+        Duration: MESSAGE.duration,
+        Text: MESSAGE.text,
+        X: 0,
+        Y: 0,
+      })
+  );
+
+  if (!textLineOk) {
+    log("");
+    log("DIAGNOSI: Method not found su TextLine = comando NON esposto");
+    log("all'xAPI della PWA Navigator (API ridotta, non il codec completo).");
+  }
+
+  const alertOk = await tryCommand(xapi, "Alert.Display", () =>
+    xapi.Command.UserInterface.Message.Alert.Display({
+      Text: MESSAGE.text,
+      Duration: MESSAGE.duration,
+    })
+  );
+
+  if (alertOk) {
+    log("");
+    log("Alert accettato — messaggio su display collegato al device xAPI.");
+    log("Dopo 60s sparisce, oppure Alert.Clear.");
+    try {
+      await xapi.Command.UserInterface.Message.Alert.Clear();
+      log("Alert.Clear OK");
+    } catch (e) {
+      log("Alert.Clear: " + formatError(e));
     }
-    if (await tryDisplay(xapi, label, params)) {
-      log("Usa sul monitor la variante che ha funzionato.");
-      return;
-    }
+    return;
   }
 
   log("");
-  log("Nessun Display riuscito. Controlla firmware / permessi PWA.");
+  log("Nessun comando messaggio disponibile su questa connessione xAPI.");
+  log("Mostra il testo solo nella PWA (HTML) o usa WebView/HttpClient verso il codec.");
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   logEl.textContent = "";
 
   window.addEventListener("unhandledrejection", (ev) => {
-    log("UNHANDLED REJECTION:");
-    log(formatError(ev.reason));
+    log("UNHANDLED: " + formatError(ev.reason));
     ev.preventDefault();
   });
 
@@ -160,12 +152,11 @@ document.addEventListener("DOMContentLoaded", () => {
       xapi = await window.getXAPI();
       log("OK: WebSocket xAPI pronto.");
     } catch (e) {
-      log("getXAPI fallito:");
-      log(formatError(e));
+      log("getXAPI fallito: " + formatError(e));
       return;
     }
 
-    await resolvePeripheralId(xapi);
-    await runTest(xapi);
+    await logDeviceInfo(xapi);
+    await runTests(xapi);
   })();
 });
