@@ -51,28 +51,34 @@ async function init() {
   }
 }
 
-// --- Comandi Nativi (TextLine) ---
+// --- Comando Prompt (Massima compatibilità) ---
 
 async function showOsdRichiestaAccesso() {
   try {
-    // Risveglia il dispositivo se è in standby
+    // Risveglia il dispositivo
     await xapi.Command.Standby.Deactivate();
     
-    // Invia il messaggio di testo
-    await xapi.Command.UserInterface.Message.TextLine.Display({
+    // Comando Prompt: crea un popup di sistema nativo
+    await xapi.Command.UserInterface.Message.Prompt.Display({
       Duration: 120,
-      Text: "RICHIESTA DI ACCESSO"
+      Title: "RICHIESTA",
+      Text: "RICHIESTA DI ACCESSO",
+      OptionId: ["1"],
+      OptionText: ["OK"]
     });
     osdRichiestaVisible = true;
   } catch (e) {
-    roomStatus.textContent = "TL Err: " + e.message;
+    roomStatus.textContent = "Prompt Err: " + e.message;
   }
 }
 
 async function clearOsdRichiestaAccesso() {
-  // TextLine non ha un comando Clear, il testo sparisce da solo.
-  // Se necessario, potresti inviare un testo vuoto o ignorare.
-  osdRichiestaVisible = false;
+  try {
+    await xapi.Command.UserInterface.Message.Prompt.Clear();
+    osdRichiestaVisible = false;
+  } catch (e) {
+    roomStatus.textContent = "Clear Err: " + e.message;
+  }
 }
 
 async function syncOsdWithPending(isPending) {
@@ -89,7 +95,7 @@ function applyUiState(isPresent, isPending) {
   if (isPresent) {
     topPanel.style.backgroundColor = PRESENT_COLOR;
     bottomPanel.style.backgroundColor = PRESENT_COLOR;
-    if (!roomStatus.textContent.startsWith("TL")) roomStatus.textContent = TEXT_PRESENT;
+    if (!roomStatus.textContent.startsWith("Prompt")) roomStatus.textContent = TEXT_PRESENT;
     
     setAccessButton(accessRequestPending ? "pending" : "present");
     syncOsdWithPending(accessRequestPending);
